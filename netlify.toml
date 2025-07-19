@@ -1,15 +1,16 @@
 [build]
-  command = "npx pnpm install --no-frozen-lockfile && npx pnpm run build"
+  command = "npm install && npm run build"
   publish = "dist"
 
 [build.environment]
-  NPM_FLAGS = "--no-frozen-lockfile"
+  # This tells Netlify to use .env.local during build
+  NODE_ENV = "production"
 
-[functions]
-  directory = "netlify/functions"
-  node_bundler = "esbuild"
+# This section ensures Vite environment variables work correctly
+[context.production.environment]
+  VITE_SUPABASE_URL = "${VITE_SUPABASE_URL}"
+  VITE_SUPABASE_ANON_KEY = "${VITE_SUPABASE_ANON_KEY}"
 
-[[redirects]]
-  from = "/*"
-  to = "/index.html"
-  status = 200
+[context.deploy-preview.environment]
+  VITE_SUPABASE_URL = "${VITE_SUPABASE_URL}"
+  VITE_SUPABASE_ANON_KEY = "${VITE_SUPABASE_ANON_KEY}"

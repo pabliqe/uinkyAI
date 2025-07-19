@@ -8,7 +8,7 @@ const __dirname = path.dirname(__filename);
 // Calculate new version
 const getNewVersion = () => {
   // Start with base version
-  const baseVersion = '1.0.';
+  const baseVersion = '1.2.';
   
   // Use current date components to create a unique build number
   const date = new Date();
