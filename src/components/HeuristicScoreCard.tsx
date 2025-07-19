@@ -1,13 +1,13 @@
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Progress } from "@/components/ui/progress";
-import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
+import { Progress } from "../components/ui/progress";
+import { Badge } from "../components/ui/badge";
 import { AlertCircle, CheckCircle, Info } from "lucide-react";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Button } from "@/components/ui/button";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "../components/ui/collapsible";
+import { Button } from "../components/ui/button";
 import { ChevronDown } from "lucide-react";
 import { useState } from "react";
-import { heuristicsData } from "@/data/heuristics";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { heuristicsData } from "../data/heuristics";
+import { Alert, AlertDescription, AlertTitle } from "../components/ui/alert";
 
 interface HeuristicResult {
   id: number;

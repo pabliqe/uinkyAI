@@ -1,16 +1,8 @@
+# Simple Netlify configuration file
 [build]
-  command = "npm install && npm run build"
   publish = "dist"
+  command = "pnpm run build"
 
 [build.environment]
-  # This tells Netlify to use .env.local during build
-  NODE_ENV = "production"
-
-# This section ensures Vite environment variables work correctly
-[context.production.environment]
-  VITE_SUPABASE_URL = "${VITE_SUPABASE_URL}"
-  VITE_SUPABASE_ANON_KEY = "${VITE_SUPABASE_ANON_KEY}"
-
-[context.deploy-preview.environment]
-  VITE_SUPABASE_URL = "${VITE_SUPABASE_URL}"
-  VITE_SUPABASE_ANON_KEY = "${VITE_SUPABASE_ANON_KEY}"
+  NETLIFY_USE_PNPM = "true"
+  NODE_VERSION = "20"

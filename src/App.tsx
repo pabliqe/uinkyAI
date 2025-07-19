@@ -1,12 +1,12 @@
-import { Toaster } from '@/components/ui/sonner';
-import { TooltipProvider } from '@/components/ui/tooltip';
+import { Toaster } from 'sonner';
+import { TooltipProvider } from '@radix-ui/react-tooltip';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import HeuristicsAnalyzerPage from './pages/Index';
 import NotFound from './pages/NotFound';
 import HowItWorks from './pages/HowItWorks';
 import ResultsPage from './pages/Results';
-import { Navbar } from './components/Navbar';
+import Navbar from './components/Navbar';
 import { createClient } from '@supabase/supabase-js';
 import { createContext, useContext } from 'react';
 

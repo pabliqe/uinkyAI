@@ -1,12 +1,12 @@
 import { useState, useEffect } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "../components/ui/card";
+import { Input } from "../components/ui/input";
+import { Button } from "../components/ui/button";
 import { toast } from "sonner";
-import { Separator } from "@/components/ui/separator";
+import { Separator } from "../components/ui/separator";
 import { Mail, Search } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
-import { getAssessmentsByEmail, Assessment } from "@/utils/supabase-service";
+import { Badge } from "../components/ui/badge";
+import { getAssessmentsByEmail, Assessment } from "../utils/supabase-service";
 import { useNavigate } from "react-router-dom";
 
 export default function ResultsPage() {
