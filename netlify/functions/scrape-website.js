@@ -137,7 +137,7 @@ exports.handler = async function(event, context) {
       const apiKey = process.env.SCREENSHOT_API_KEY || 'demo';
       console.log(`Using API key: ${apiKey === 'demo' ? 'demo (default)' : 'from environment'}`);
       
-      const screenshotApiUrl = `https://api.apiflash.com/v1/urltoimage?access_key=${apiKey}&url=${encodeURIComponent(url)}&quality=85&width=1280&height=800&response_type=json&fresh=true`;
+      const screenshotApiUrl = `https://api.apiflash.com/v1/urltoimage?access_key=${apiKey}&url=${encodeURIComponent(url)}&quality=85&width=1280&height=800&response_type=json&fresh=true&full_page=true`;
       
       console.log(`Requesting screenshot from: ${screenshotApiUrl}`);
       const screenshotResponse = await axios.get(screenshotApiUrl);

@@ -1,5 +1,5 @@
 // Serverless function for sending emails
-const emailjs = require('@emailjs/nodejs');
+const axios = require('axios');
 
 // Configure allowed origins for CORS
 const allowedOrigins = [
@@ -79,30 +79,30 @@ exports.handler = async function(event, context) {
       };
     }
     
-    // Initialize EmailJS with environment variables
-    emailjs.init({
-      publicKey: process.env.EMAILJS_PUBLIC_KEY,
-      privateKey: process.env.EMAILJS_PRIVATE_KEY,
-    });
+    // Use FormData API to send email via an alternative service (Formspree)
+    // Formspree offers a free tier with up to 50 submissions per month
+    const formspreeEndpoint = process.env.FORMSPREE_ENDPOINT || 'https://formspree.io/f/YOUR_FORM_ID';
     
-    // Send the email
-    const result = await emailjs.send(
-      process.env.EMAILJS_SERVICE_ID,
-      process.env.EMAILJS_TEMPLATE_ID,
-      {
-        to_email,
-        subject: subject || 'UX Heuristics Analysis Results',
-        message_html,
+    // Send the email via Formspree
+    const response = await axios.post(formspreeEndpoint, {
+      email: to_email,
+      subject: subject || 'UX Heuristics Analysis Results',
+      message: message_html,
+      _subject: subject || 'UX Heuristics Analysis Results'
+    }, {
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
       }
-    );
+    });
     
     return {
       statusCode: 200,
       headers,
       body: JSON.stringify({
         success: true,
-        status: result.status,
-        text: result.text,
+        status: response.status,
+        text: 'Email sent successfully via Formspree',
         message: 'Email sent successfully'
       })
     };
