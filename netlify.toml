@@ -1,6 +1,9 @@
 [build]
-  command = "pnpm run build"
+  command = "npx pnpm install --no-frozen-lockfile && npx pnpm run build"
   publish = "dist"
+
+[build.environment]
+  NPM_FLAGS = "--no-frozen-lockfile"
 
 [functions]
   directory = "netlify/functions"

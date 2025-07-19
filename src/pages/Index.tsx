@@ -12,8 +12,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import HeuristicScoreCard from "@/components/HeuristicScoreCard";
 import { heuristicsData } from "@/data/heuristics";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { sendEmail } from "@/utils/email-service";
-import { sendEmailApi } from "@/utils/email-api-service";
+import { submitAssessment } from "@/utils/supabase-service";
 import { APP_VERSION } from "@/config/version";
 
 export default function HeuristicsAnalyzerPage() {
@@ -28,7 +27,7 @@ export default function HeuristicsAnalyzerPage() {
   const [url, setUrl] = useState("");
   const [email, setEmail] = useState(getSavedEmail);
   const [isLoading, setIsLoading] = useState(false);
-  const [isSendingEmail, setIsSendingEmail] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [results, setResults] = useState<HeuristicResult[] | null>(null);
   const [activeTab, setActiveTab] = useState("overview");
   const [overallScore, setOverallScore] = useState(0);
@@ -526,133 +525,64 @@ export default function HeuristicsAnalyzerPage() {
     return <CheckCircle className="w-5 h-5 text-green-600" />;
   };
 
-  // Function to send results via email
-  const sendResultsByEmail = async () => {
+  // Function to save results to Supabase
+  const saveResults = async () => {
     if (!email) {
-      toast.error("Please enter an email address to receive the results");
+      toast.error("Please enter an email address to save the results");
       return;
     }
     
     if (!results || !url) {
-      toast.error("No analysis results to send");
+      toast.error("No analysis results to save");
       return;
     }
     
     try {
-      setIsSendingEmail(true);
+      setIsSaving(true);
       
-      // Create email content
-      const domain = new URL(url.startsWith('http') ? url : `https://${url}`).hostname;
-      const emailSubject = `UX Analysis Results for ${domain} - Score: ${overallScore}%`;
-      const emailContent = formatEmailContent(url, overallScore, results);
+      // Prepare data for submission
+      const processedUrl = url.startsWith('http') ? url : `https://${url}`;
+      const screenshot = results[0]?.screenshot;
       
-      // Try to use the serverless function first
-      try {
-        // Send email using the serverless function
-        const result = await sendEmailApi({
-          to_email: email,
-          subject: emailSubject,
-          message_html: emailContent
+      // Convert the results array to a format suitable for storing in the database
+      const scoresObject = results.reduce((acc, result) => {
+        acc[`heuristic_${result.id}`] = {
+          id: result.id,
+          title: result.shortTitle,
+          score: result.score,
+          findings: result.findings,
+          recommendations: result.recommendations
+        };
+        return acc;
+      }, {} as Record<string, { id: number; title: string; score: number; findings: string[]; recommendations: string[] }>);
+      
+      // Submit to Supabase
+      const result = await submitAssessment({
+        email,
+        url: processedUrl,
+        screenshot,
+        scores: scoresObject,
+        overallScore
+      });
+      
+      if (result.success) {
+        toast.success(`Analysis results saved for ${email}`, { 
+          description: "Your UX analysis has been saved successfully" 
         });
-        
-        if (result.success) {
-          toast.success(`Analysis results sent to ${email}`, { 
-            description: "Check your inbox for the detailed report" 
-          });
-        } else {
-          throw new Error(result.error || 'Unknown error');
-        }
-        
-        console.log("Email sending result:", result);
-      } catch (apiError) {
-        console.error("API email sending failed:", apiError);
-        
-        toast.warning("Serverless function not available. Using browser fallback...");
-        
-        // Fall back to client-side email sending if the API call fails
-        const result = await sendEmail({
-          to_email: email,
-          subject: emailSubject,
-          message_html: emailContent
-        });
-        
-        if (result.success) {
-          toast.success(`Analysis results sent to ${email}`, { 
-            description: "Check your inbox for the detailed report" 
-          });
-        } else {
-          toast.error(`Failed to send email: ${result.message}`);
-        }
+      } else {
+        throw new Error(result.message || 'Unknown error');
       }
+      
+      console.log("Data submission result:", result);
     } catch (error) {
-      console.error("Failed to send email:", error);
-      toast.error("Failed to send email. Please try again.");
+      console.error("Failed to save results:", error);
+      toast.error(`Failed to save results: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
-      setIsSendingEmail(false);
+      setIsSaving(false);
     }
   };
   
-  // Format the email content with the analysis results with HTML formatting
-  const formatEmailContent = (analyzeUrl: string, overall: number, resultsData: HeuristicResult[]) => {
-    // Get domain name from URL
-    const domain = new URL(analyzeUrl.startsWith('http') ? analyzeUrl : `https://${analyzeUrl}`).hostname;
-    
-    // Create summary section with HTML
-    const summaryHtml = `
-      <div style="margin-bottom: 25px;">
-        <h2 style="color: #333;">UX Heuristics Analysis for: ${domain}</h2>
-        <p><strong>Overall Score:</strong> <span style="font-size: 18px; ${overall < 30 ? 'color: #dc2626;' : overall < 70 ? 'color: #d97706;' : 'color: #16a34a;'}">${overall}%</span></p>
-        <p><strong>Date:</strong> ${new Date().toLocaleDateString()}</p>
-        
-        <h3 style="margin-top: 20px; border-bottom: 1px solid #eee; padding-bottom: 10px;">SUMMARY OF FINDINGS</h3>
-        <ul style="list-style-type: none; padding-left: 0;">
-          ${resultsData.map(result => 
-            `<li style="margin-bottom: 8px; padding: 8px; border-left: 3px solid ${result.score < 30 ? '#dc2626' : result.score < 70 ? '#d97706' : '#16a34a'}; padding-left: 10px;">
-              <strong>${result.shortTitle}:</strong> ${result.score}% - ${getScoreSummary(result.score)}
-            </li>`
-          ).join('')}
-        </ul>
-      </div>
-    `;
-    
-    // Create detailed section with HTML
-    const detailedHtml = `
-      <div style="margin-top: 30px;">
-        <h3 style="border-bottom: 1px solid #eee; padding-bottom: 10px;">DETAILED ANALYSIS</h3>
-        
-        ${resultsData.map(result => `
-          <div style="margin-bottom: 30px; padding: 15px; background-color: #f9fafb; border-radius: 8px;">
-            <h4 style="margin-top: 0; color: ${result.score < 30 ? '#dc2626' : result.score < 70 ? '#d97706' : '#16a34a'};">
-              ${result.title} (${result.score}%)
-            </h4>
-            
-            <h5 style="margin-bottom: 8px;">Findings:</h5>
-            <ul style="margin-top: 0;">
-              ${result.findings.map(finding => `<li>${finding}</li>`).join('')}
-            </ul>
-            
-            <h5 style="margin-bottom: 8px;">Recommendations:</h5>
-            <ul style="margin-top: 0;">
-              ${result.recommendations.map(rec => `<li>${rec}</li>`).join('')}
-            </ul>
-          </div>
-        `).join('')}
-      </div>
-    `;
-    
-    // Complete email content with HTML wrapper
-    return `
-      <div style="font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; color: #333; line-height: 1.5;">
-        ${summaryHtml}
-        ${detailedHtml}
-        <div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #eee; font-size: 12px; color: #666; text-align: center;">
-          This analysis was generated by UX Heuristics Analyzer on ${new Date().toLocaleString()}
-        </div>
-      </div>
-    `;
-  };
-  
-  // Helper function for email summary
+  // Helper function for score summaries
   const getScoreSummary = (score: number): string => {
     if (score < 30) return "Critical issues found";
     if (score < 70) return "Needs improvement";
@@ -793,26 +723,26 @@ export default function HeuristicsAnalyzerPage() {
                     </div>
                   )}
                   
-                  {/* Send results via email button */}
+                  {/* Save results button */}
                   {email && (
                     <Button 
-                      onClick={() => sendResultsByEmail()} 
-                      disabled={isSendingEmail}
+                      onClick={() => saveResults()} 
+                      disabled={isSaving}
                       className="w-full py-4 text-md font-medium bg-blue-600 hover:bg-blue-700 flex items-center justify-center gap-2"
                     >
-                      {isSendingEmail ? (
+                      {isSaving ? (
                         <>
                           <span className="animate-spin mr-2">
                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                               <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
                             </svg>
                           </span>
-                          Sending...
+                          Saving to Database...
                         </>
                       ) : (
                         <>
                           <Mail className="h-4 w-4 mr-1" />
-                          Send Results to {email}
+                          Save Results for {email}
                         </>
                       )}
                     </Button>

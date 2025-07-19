@@ -1,6 +1,8 @@
-# Shadcn-UI Template Usage Instructions
+# UX Heuristics Analyzer
 
-## technology stack
+A web application for analyzing websites against Nielsen's heuristics principles.
+
+## Technology Stack
 
 This project is built with:
 
@@ -9,8 +11,41 @@ This project is built with:
 - React
 - shadcn-ui
 - Tailwind CSS
+- Supabase (for data storage)
 
 All shadcn/ui components have been downloaded under `@/components/ui`.
+
+## Features
+
+- Analyze websites against 10 Nielsen's heuristics
+- Capture full-page screenshots
+- Score websites on usability criteria
+- Generate detailed findings and recommendations
+- Save results to Supabase database
+- View historical analysis results
+
+## Setup
+
+### Prerequisites
+
+1. Create a Supabase account and project at [supabase.com](https://supabase.com)
+2. Set up the database schema by running the SQL in `supabase/schema.sql`
+
+### Environment Variables
+
+Create a `.env.local` file based on the `.env.local.example` template:
+
+```
+# Supabase configuration
+VITE_SUPABASE_URL=your-supabase-url
+VITE_SUPABASE_ANON_KEY=your-supabase-anon-key
+
+# API Keys (only used in Netlify functions if needed)
+SCREENSHOT_API_KEY=your-screenshot-api-key
+
+# App version
+APP_VERSION=1.0.0
+```
 
 ## File Structure
 
@@ -21,26 +56,23 @@ All shadcn/ui components have been downloaded under `@/components/ui`.
 - `src/app.tsx` - Root component of the project
 - `src/main.tsx` - Project entry point
 - `src/index.css` - Existing CSS configuration
+- `supabase/schema.sql` - SQL for setting up the Supabase database structure
 
-## Components
+## Database Structure
 
-- All shadcn/ui components are pre-downloaded and available at `@/components/ui`
+The application uses a Supabase database with the following tables:
 
-## Styling
-
-- Add global styles to `src/index.css` or create new CSS files as needed
-- Use Tailwind classes for styling components
+1. **leads** - Stores user contact information
+2. **sites** - Stores analyzed website URLs
+3. **requests** - Stores analysis results, including heuristic scores and screenshots
 
 ## Development
 
 - Import components from `@/components/ui` in your React components
 - Customize the UI by modifying the Tailwind configuration
+- The `@/` path alias points to the `src/` directory
 
-## Note
-
-The `@/` path alias points to the `src/` directory
-
-# Commands
+## Commands
 
 **Install Dependencies**
 
@@ -48,13 +80,13 @@ The `@/` path alias points to the `src/` directory
 pnpm i
 ```
 
-**Start Preview**
+**Start Development Server**
 
 ```shell
 pnpm run dev
 ```
 
-**To build**
+**Build for Production**
 
 ```shell
 pnpm run build

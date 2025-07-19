@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { QuestionMarkCircledIcon } from "@radix-ui/react-icons";
+import { ClipboardIcon } from "lucide-react";
 
 export function Navbar() {
   return (
@@ -30,6 +31,12 @@ export function Navbar() {
           <span className="font-bold text-xl text-primary">UX Analyzer</span>
         </Link>
         <div className="flex items-center gap-4">
+          <Link to="/results">
+            <Button variant="ghost" size="sm" className="gap-2">
+              <ClipboardIcon className="h-4 w-4" />
+              My Results
+            </Button>
+          </Link>
           <Link to="/how-it-works">
             <Button variant="ghost" size="sm" className="gap-2">
               <QuestionMarkCircledIcon className="h-4 w-4" />
