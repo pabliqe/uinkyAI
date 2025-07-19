@@ -6,3 +6,4 @@
 [build.environment]
   NETLIFY_USE_PNPM = "true"
   NODE_VERSION = "20"
+  NPM_FLAGS = "--no-frozen-lockfile"
