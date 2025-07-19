@@ -14,6 +14,7 @@ import { heuristicsData } from "@/data/heuristics";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { sendEmail } from "@/utils/email-service";
 import { sendEmailApi } from "@/utils/email-api-service";
+import { APP_VERSION } from "@/config/version";
 
 export default function HeuristicsAnalyzerPage() {
   // Try to load email from localStorage on component mount
@@ -664,7 +665,7 @@ export default function HeuristicsAnalyzerPage() {
         <div className="space-y-4 max-w-2xl">
           <div className="flex flex-col items-center gap-2">
             <h1 className="text-4xl font-bold tracking-tight">Get Free UX Analysis on your Site</h1>
-            <Badge variant="outline" className="text-xs font-normal">Version 1.2.0</Badge>
+            <Badge variant="outline" className="text-xs font-normal">Version {APP_VERSION}</Badge>
           </div>
           <p className="text-lg text-muted-foreground">
             This automated-AI heuristic analysis runs over the selected website of your preference. It's 100% free!

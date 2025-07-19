@@ -81,13 +81,16 @@ exports.handler = async function(event, context) {
     
     // Use FormData API to send email via an alternative service (Formspree)
     // Formspree offers a free tier with up to 50 submissions per month
-    const formspreeEndpoint = process.env.FORMSPREE_ENDPOINT || 'https://formspree.io/f/YOUR_FORM_ID';
+    const formspreeEndpoint = process.env.FORMSPREE_ENDPOINT || 'https://formspree.io/f/mbjnlzpb';
+    
+    console.log(`Sending email to ${to_email} via Formspree at ${formspreeEndpoint}`);
     
     // Send the email via Formspree
     const response = await axios.post(formspreeEndpoint, {
       email: to_email,
       subject: subject || 'UX Heuristics Analysis Results',
       message: message_html,
+      _replyto: to_email, // Important for Formspree to know reply-to address
       _subject: subject || 'UX Heuristics Analysis Results'
     }, {
       headers: {
@@ -95,6 +98,8 @@ exports.handler = async function(event, context) {
         'Accept': 'application/json'
       }
     });
+    
+    console.log('Formspree response:', response.status, response.data);
     
     return {
       statusCode: 200,
