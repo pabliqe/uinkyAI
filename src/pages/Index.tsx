@@ -12,6 +12,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import HeuristicScoreCard from "@/components/HeuristicScoreCard";
 import { heuristicsData } from "@/data/heuristics";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { sendEmail } from "@/utils/email-service";
 
 export default function HeuristicsAnalyzerPage() {
   // Try to load email from localStorage on component mount
@@ -72,30 +73,84 @@ export default function HeuristicsAnalyzerPage() {
 
   const analyzeUrl = async (processedUrl: string) => {
     try {
-      // Simulate API call with random scores
-      // In a real application, this would be an actual API call to a backend service
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      // Use the web scraper to get page data
+      toast.info("Scraping website content...");
       
-      // Generate deterministic scores for each heuristic based on URL properties
-      const mockResults: HeuristicResult[] = heuristicsData.heuristics.map(heuristic => {
-        // Get a deterministic score based on URL and heuristic ID
-        const score = generateDeterministicScore(processedUrl, heuristic.id);
-        return {
-          id: heuristic.id,
-          title: heuristic.title,
-          shortTitle: heuristic.shortTitle,
-          score,
-          findings: generateMockFindings(score, heuristic.title),
-          recommendations: generateMockRecommendations(score, heuristic.id)
-        };
-      });
+      // Import dependencies
+      const { analyzeHeuristics } = await import('@/utils/heuristics-analyzer');
+      const { scrapeWebsiteApi } = await import('@/utils/api-service');
+      const { CORSError } = await import('@/utils/web-scraper');
       
-      const totalScore = Math.round(mockResults.reduce((sum, h) => sum + h.score, 0) / mockResults.length);
-      setOverallScore(totalScore);
-      setResults(mockResults);
-      setActiveTab("overview");
-      
-      toast.success("Analysis complete!");
+      try {
+        // First, try to use the serverless function
+        let scrapedData;
+        let screenshot = null;
+        
+        try {
+          // Get data from serverless function (includes screenshot)
+          scrapedData = await scrapeWebsiteApi(processedUrl);
+          
+          // Extract screenshot from API response if available
+          if (scrapedData.screenshot) {
+            screenshot = scrapedData.screenshot;
+            delete scrapedData.screenshot; // Remove from data to avoid duplication
+          }
+        } catch (apiError) {
+          console.error("API scraping failed:", apiError);
+          
+          toast.warning("Serverless function not available. Trying browser fallback...", { 
+            id: "scraping-mode" 
+          });
+          
+          // Fall back to browser-based scraping if the API call fails
+          const { scrapeWebPage } = await import('@/utils/web-scraper');
+          scrapedData = await scrapeWebPage(processedUrl);
+          
+          // Try to capture a screenshot separately
+          try {
+            const { captureScreenshot } = await import('@/utils/screenshot-service');
+            screenshot = await captureScreenshot(processedUrl);
+          } catch (screenshotError) {
+            console.error("Screenshot capture failed:", screenshotError);
+          }
+        }
+        
+        toast.info("Analyzing content against heuristics...");
+        
+        // Analyze the scraped data against heuristics
+        const { results: heuristicResults, overallScore: totalScore } = analyzeHeuristics(scrapedData);
+        
+        // Map to HeuristicResult type
+        const finalResults: HeuristicResult[] = heuristicResults.map(result => {
+          return {
+            id: result.id,
+            title: result.title,
+            shortTitle: result.shortTitle,
+            score: result.score,
+            findings: result.findings,
+            recommendations: result.recommendations,
+            screenshot: screenshot || undefined
+          };
+        });
+        
+        setOverallScore(totalScore);
+        setResults(finalResults);
+        setActiveTab("overview");
+        
+        toast.success("Analysis complete!");
+      } catch (error) {
+        console.error("Error during web scraping:", error);
+        
+        if (error instanceof CORSError) {
+          // Show a more helpful error message for CORS issues
+          toast.error("Browser security prevents direct website access", {
+            description: "When deployed, this tool uses a serverless function to analyze websites without CORS issues.",
+            duration: 8000
+          });
+        } else {
+          toast.error(`Failed to analyze website: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        }
+      }
     } catch (error) {
       console.error(error);
       toast.error("Failed to analyze website. Please try again.");
@@ -484,20 +539,27 @@ export default function HeuristicsAnalyzerPage() {
     try {
       setIsSendingEmail(true);
       
-      // In a real application, this would make an API call to a server that sends emails
-      // For demo purposes, we'll simulate the email sending process
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      
       // Create email content
+      const domain = new URL(url.startsWith('http') ? url : `https://${url}`).hostname;
+      const emailSubject = `UX Analysis Results for ${domain} - Score: ${overallScore}%`;
       const emailContent = formatEmailContent(url, overallScore, results);
-      console.log("Email content prepared:", emailContent);
       
-      // Log that we would send this email
-      console.log(`Would send email to: ${email}`);
-      
-      toast.success(`Analysis results sent to ${email}`, { 
-        description: "Check your inbox for the detailed report" 
+      // Send email using the email service
+      const result = await sendEmail({
+        to_email: email,
+        subject: emailSubject,
+        message_html: emailContent
       });
+      
+      if (result.success) {
+        toast.success(`Analysis results sent to ${email}`, { 
+          description: "Check your inbox for the detailed report" 
+        });
+      } else {
+        toast.error(`Failed to send email: ${result.message}`);
+      }
+      
+      console.log("Email sending result:", result);
     } catch (error) {
       console.error("Failed to send email:", error);
       toast.error("Failed to send email. Please try again.");
@@ -506,41 +568,64 @@ export default function HeuristicsAnalyzerPage() {
     }
   };
   
-  // Format the email content with the analysis results
+  // Format the email content with the analysis results with HTML formatting
   const formatEmailContent = (analyzeUrl: string, overall: number, resultsData: HeuristicResult[]) => {
-    // Get domain name from URL for email subject
+    // Get domain name from URL
     const domain = new URL(analyzeUrl.startsWith('http') ? analyzeUrl : `https://${analyzeUrl}`).hostname;
     
-    // Create summary section
-    const summary = `
-      UX Heuristics Analysis for: ${domain}
-      Overall Score: ${overall}%
-      Date: ${new Date().toLocaleDateString()}
-      
-      SUMMARY OF FINDINGS:
-      ${resultsData.map(result => 
-        `${result.shortTitle}: ${result.score}% - ${getScoreSummary(result.score)}`
-      ).join('\n')}
+    // Create summary section with HTML
+    const summaryHtml = `
+      <div style="margin-bottom: 25px;">
+        <h2 style="color: #333;">UX Heuristics Analysis for: ${domain}</h2>
+        <p><strong>Overall Score:</strong> <span style="font-size: 18px; ${overall < 30 ? 'color: #dc2626;' : overall < 70 ? 'color: #d97706;' : 'color: #16a34a;'}">${overall}%</span></p>
+        <p><strong>Date:</strong> ${new Date().toLocaleDateString()}</p>
+        
+        <h3 style="margin-top: 20px; border-bottom: 1px solid #eee; padding-bottom: 10px;">SUMMARY OF FINDINGS</h3>
+        <ul style="list-style-type: none; padding-left: 0;">
+          ${resultsData.map(result => 
+            `<li style="margin-bottom: 8px; padding: 8px; border-left: 3px solid ${result.score < 30 ? '#dc2626' : result.score < 70 ? '#d97706' : '#16a34a'}; padding-left: 10px;">
+              <strong>${result.shortTitle}:</strong> ${result.score}% - ${getScoreSummary(result.score)}
+            </li>`
+          ).join('')}
+        </ul>
+      </div>
     `;
     
-    // Create detailed section
-    const detailedAnalysis = resultsData.map(result => `
-      ${result.title} (${result.score}%)
-      -------------------------------------------
-      
-      Findings:
-      ${result.findings.map(finding => `- ${finding}`).join('\n')}
-      
-      Recommendations:
-      ${result.recommendations.map(rec => `- ${rec}`).join('\n')}
-      
-    `).join('\n\n');
+    // Create detailed section with HTML
+    const detailedHtml = `
+      <div style="margin-top: 30px;">
+        <h3 style="border-bottom: 1px solid #eee; padding-bottom: 10px;">DETAILED ANALYSIS</h3>
+        
+        ${resultsData.map(result => `
+          <div style="margin-bottom: 30px; padding: 15px; background-color: #f9fafb; border-radius: 8px;">
+            <h4 style="margin-top: 0; color: ${result.score < 30 ? '#dc2626' : result.score < 70 ? '#d97706' : '#16a34a'};">
+              ${result.title} (${result.score}%)
+            </h4>
+            
+            <h5 style="margin-bottom: 8px;">Findings:</h5>
+            <ul style="margin-top: 0;">
+              ${result.findings.map(finding => `<li>${finding}</li>`).join('')}
+            </ul>
+            
+            <h5 style="margin-bottom: 8px;">Recommendations:</h5>
+            <ul style="margin-top: 0;">
+              ${result.recommendations.map(rec => `<li>${rec}</li>`).join('')}
+            </ul>
+          </div>
+        `).join('')}
+      </div>
+    `;
     
-    // Complete email content
-    return {
-      subject: `UX Heuristics Analysis for ${domain} - Score: ${overall}%`,
-      body: summary + '\n\n' + 'DETAILED ANALYSIS:\n\n' + detailedAnalysis
-    };
+    // Complete email content with HTML wrapper
+    return `
+      <div style="font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; color: #333; line-height: 1.5;">
+        ${summaryHtml}
+        ${detailedHtml}
+        <div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #eee; font-size: 12px; color: #666; text-align: center;">
+          This analysis was generated by UX Heuristics Analyzer on ${new Date().toLocaleString()}
+        </div>
+      </div>
+    `;
   };
   
   // Helper function for email summary
@@ -551,7 +636,7 @@ export default function HeuristicsAnalyzerPage() {
   };
   
   return (
-    <div className="container mx-auto p-4 max-w-3xl">
+    <div className="container mx-auto p-4 max-w-3xl pt-8">
       <div className="flex flex-col space-y-8 items-center text-center">
         <div className="space-y-4 max-w-2xl">
           <h1 className="text-4xl font-bold tracking-tight">Get Free UX Analysis on your Site</h1>
@@ -570,6 +655,46 @@ export default function HeuristicsAnalyzerPage() {
                 onChange={(e) => setUrl(e.target.value)}
                 className="flex-1"
               />
+              
+              {/* Responsive grid for test buttons - 2 buttons per row on mobile, 4 on larger screens */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => setUrl("google.com")}
+                  disabled={isLoading}
+                  className="flex items-center justify-center gap-1"
+                >
+                  Test Google
+                </Button>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => setUrl("amazon.com")}
+                  disabled={isLoading}
+                  className="flex items-center justify-center gap-1"
+                >
+                  Test Amazon
+                </Button>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => setUrl("facebook.com")}
+                  disabled={isLoading}
+                  className="flex items-center justify-center gap-1"
+                >
+                  Test Facebook
+                </Button>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => setUrl("twitter.com")}
+                  disabled={isLoading}
+                  className="flex items-center justify-center gap-1"
+                >
+                  Test Twitter
+                </Button>
+              </div>
               <Input
                 type="email"
                 placeholder="work email (optional)"
@@ -584,112 +709,15 @@ export default function HeuristicsAnalyzerPage() {
                 }}
                 className="flex-1"
               />
-              <div className="flex gap-4">
-                <Button 
-                  onClick={analyzeWebsite} 
-                  disabled={isLoading}
-                  className="flex-1 py-6 text-lg font-semibold"
-                >
-                  {isLoading ? "ANALYZING..." : "RUN"}
-                </Button>
-                
-                <Button
-                  onClick={() => {
-                    if (email) {
-                      const savedEmails = JSON.parse(localStorage.getItem("savedEmails") || "[]");
-                      if (!savedEmails.includes(email)) {
-                        savedEmails.push(email);
-                        localStorage.setItem("savedEmails", JSON.stringify(savedEmails));
-                        toast.success(`Email saved: ${email}`, { description: "This email has been saved to localStorage" });
-                      } else {
-                        toast.info(`Email already saved: ${email}`);
-                      }
-                    } else {
-                      toast.error("Please enter an email to save");
-                    }
-                  }}
-                  variant="outline"
-                  className="px-4"
-                  title="Save email to localStorage"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
-                    <polyline points="17 21 17 13 7 13 7 21"/>
-                    <polyline points="7 3 7 8 15 8"/>
-                  </svg>
-                </Button>
-              </div>
+              <Button 
+                onClick={analyzeWebsite} 
+                disabled={isLoading}
+                className="w-full py-6 text-lg font-semibold"
+              >
+                {isLoading ? "ANALYZING..." : "RUN"}
+              </Button>
 
-              {/* Quick test buttons for sample sites */}
-              <div className="pt-2">
-                <p className="text-sm text-muted-foreground mb-2">Or try a sample site:</p>
-                <div className="grid grid-cols-2 gap-3">
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
-                    onClick={() => {
-                      setUrl("google.com");
-                      analyzeWebsite();
-                    }}
-                    disabled={isLoading}
-                    className="flex items-center justify-center gap-2"
-                  >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <path d="M12 11V8L17 12L12 16V13H7V11H12Z" fill="currentColor" />
-                      <path fillRule="evenodd" clipRule="evenodd" d="M7 3C4.23858 3 2 5.23858 2 8V16C2 18.7614 4.23858 21 7 21H17C19.7614 21 22 18.7614 22 16V8C22 5.23858 19.7614 3 17 3H7ZM4 8C4 6.34315 5.34315 5 7 5H17C18.6569 5 20 6.34315 20 8V16C20 17.6569 18.6569 19 17 19H7C5.34315 19 4 17.6569 4 16V8Z" fill="currentColor" />
-                    </svg>
-                    Test Google
-                  </Button>
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
-                    onClick={() => {
-                      setUrl("amazon.com");
-                      analyzeWebsite();
-                    }}
-                    disabled={isLoading}
-                    className="flex items-center justify-center gap-2"
-                  >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <path d="M12 11V8L17 12L12 16V13H7V11H12Z" fill="currentColor" />
-                      <path fillRule="evenodd" clipRule="evenodd" d="M7 3C4.23858 3 2 5.23858 2 8V16C2 18.7614 4.23858 21 7 21H17C19.7614 21 22 18.7614 22 16V8C22 5.23858 19.7614 3 17 3H7ZM4 8C4 6.34315 5.34315 5 7 5H17C18.6569 5 20 6.34315 20 8V16C20 17.6569 18.6569 19 17 19H7C5.34315 19 4 17.6569 4 16V8Z" fill="currentColor" />
-                    </svg>
-                    Test Amazon
-                  </Button>
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
-                    onClick={() => {
-                      setUrl("facebook.com");
-                      analyzeWebsite();
-                    }}
-                    disabled={isLoading}
-                    className="flex items-center justify-center gap-2"
-                  >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <path d="M12 11V8L17 12L12 16V13H7V11H12Z" fill="currentColor" />
-                      <path fillRule="evenodd" clipRule="evenodd" d="M7 3C4.23858 3 2 5.23858 2 8V16C2 18.7614 4.23858 21 7 21H17C19.7614 21 22 18.7614 22 16V8C22 5.23858 19.7614 3 17 3H7ZM4 8C4 6.34315 5.34315 5 7 5H17C18.6569 5 20 6.34315 20 8V16C20 17.6569 18.6569 19 17 19H7C5.34315 19 4 17.6569 4 16V8Z" fill="currentColor" />
-                    </svg>
-                    Test Facebook
-                  </Button>
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
-                    onClick={() => {
-                      setUrl("twitter.com");
-                      analyzeWebsite();
-                    }}
-                    disabled={isLoading}
-                    className="flex items-center justify-center gap-2"
-                  >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <path d="M12 11V8L17 12L12 16V13H7V11H12Z" fill="currentColor" />
-                      <path fillRule="evenodd" clipRule="evenodd" d="M7 3C4.23858 3 2 5.23858 2 8V16C2 18.7614 4.23858 21 7 21H17C19.7614 21 22 18.7614 22 16V8C22 5.23858 19.7614 3 17 3H7ZM4 8C4 6.34315 5.34315 5 7 5H17C18.6569 5 20 6.34315 20 8V16C20 17.6569 18.6569 19 17 19H7C5.34315 19 4 17.6569 4 16V8Z" fill="currentColor" />
-                    </svg>
-                    Test Twitter
-                  </Button>
-                </div>
-              </div>
+              {/* Sample site buttons moved up under URL input */}
             </div>
           </CardContent>
         </Card>
@@ -723,6 +751,20 @@ export default function HeuristicsAnalyzerPage() {
                       } as React.CSSProperties}
                     />
                   </div>
+                  
+                  {/* Display screenshot in overview if available */}
+                  {results && results[0]?.screenshot && (
+                    <div className="space-y-2 pt-2">
+                      <h3 className="text-sm font-medium text-center">Website Screenshot</h3>
+                      <div className="border rounded-md overflow-hidden shadow-sm">
+                        <img 
+                          src={`data:image/jpeg;base64,${results[0].screenshot}`}
+                          alt="Website Screenshot" 
+                          className="w-full h-auto"
+                        />
+                      </div>
+                    </div>
+                  )}
                   
                   {/* Send results via email button */}
                   {email && (
@@ -782,71 +824,19 @@ export default function HeuristicsAnalyzerPage() {
             </TabsContent>
             
             <TabsContent value="detailed" className="space-y-4 text-left">
-              <ScrollArea className="h-[600px] pr-4">
+              {/* Removed fixed height ScrollArea to let content grow naturally */}
+              <div className="pr-4">
                 {results.map((result) => (
                   <div id={`heuristic-${result.id}`} key={result.id}>
                     <HeuristicScoreCard heuristic={result} />
                   </div>
                 ))}
-              </ScrollArea>
+              </div>
             </TabsContent>
           </Tabs>
         )}
         
-        {/* Bottom action buttons */}
-        <div className="w-full max-w-xl mt-4">
-          {/* Export as PDF button when results are available */}
-          {results && (
-            <Button 
-              onClick={() => {
-                toast.success("This is a frontend mockup. In a real app, this would generate a PDF of your analysis results.");
-                console.log("Export as PDF clicked");
-              }}
-              variant="outline"
-              className="w-full py-4 flex items-center justify-center gap-2 mb-4"
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M12 2V15M12 15L7 10M12 15L17 10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                <path d="M2 17V20C2 21.1046 2.89543 22 4 22H20C21.1046 22 22 21.1046 22 20V17" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-              Export as PDF
-            </Button>
-          )}
-
-          {/* View Saved Emails button */}
-          <Button 
-            onClick={() => {
-              const savedEmails = JSON.parse(localStorage.getItem("savedEmails") || "[]");
-              if (savedEmails.length > 0) {
-                toast.success("Saved Emails:", {
-                  description: (
-                    <div className="mt-2 max-h-32 overflow-y-auto">
-                      <ul className="list-disc pl-4">
-                        {savedEmails.map((savedEmail: string, index: number) => (
-                          <li key={index} className="text-sm">{savedEmail}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  ),
-                  duration: 5000,
-                });
-                console.log("Saved emails:", savedEmails);
-              } else {
-                toast.info("No emails saved yet");
-              }
-            }}
-            variant="outline"
-            className="w-full py-4 flex items-center justify-center gap-2"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
-              <line x1="16" y1="2" x2="16" y2="6"></line>
-              <line x1="8" y1="2" x2="8" y2="6"></line>
-              <line x1="3" y1="10" x2="21" y2="10"></line>
-            </svg>
-            View Saved Emails
-          </Button>
-        </div>
+        {/* Removed bottom action buttons as requested */}
       </div>
     </div>
   );
@@ -860,4 +850,5 @@ interface HeuristicResult {
   score: number;
   findings: string[];
   recommendations: string[];
+  screenshot?: string;
 }

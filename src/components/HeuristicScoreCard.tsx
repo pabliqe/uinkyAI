@@ -16,6 +16,7 @@ interface HeuristicResult {
   score: number;
   findings: string[];
   recommendations: string[];
+  screenshot?: string;
 }
 
 interface HeuristicScoreCardProps {
@@ -214,6 +215,22 @@ export default function HeuristicScoreCard({ heuristic }: HeuristicScoreCardProp
                 ))}
               </div>
             </div>
+            {/* Display screenshot if available */}
+            {heuristic.screenshot && (
+              <div className="space-y-2 pt-4">
+                <h4 className="text-sm font-medium">Website Screenshot</h4>
+                <div className="border rounded-md overflow-hidden shadow-sm">
+                  <img 
+                    src={`data:image/jpeg;base64,${heuristic.screenshot}`}
+                    alt="Website Screenshot" 
+                    className="w-full h-auto"
+                  />
+                </div>
+                <p className="text-xs text-gray-500 italic text-center pt-1">
+                  Screenshot captured during analysis
+                </p>
+              </div>
+            )}
           </CollapsibleContent>
         </Collapsible>
       </CardContent>
