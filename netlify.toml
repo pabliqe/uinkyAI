@@ -1,7 +1,7 @@
 # Simple Netlify configuration file
 [build]
   publish = "dist"
-  command = "pnpm run build"
+  command = "pnpm install && pnpm run build"
 
 [build.environment]
   NETLIFY_USE_PNPM = "true"
