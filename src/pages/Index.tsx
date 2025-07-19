@@ -13,6 +13,7 @@ import HeuristicScoreCard from "@/components/HeuristicScoreCard";
 import { heuristicsData } from "@/data/heuristics";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { sendEmail } from "@/utils/email-service";
+import { sendEmailApi } from "@/utils/email-api-service";
 
 export default function HeuristicsAnalyzerPage() {
   // Try to load email from localStorage on component mount
@@ -544,22 +545,44 @@ export default function HeuristicsAnalyzerPage() {
       const emailSubject = `UX Analysis Results for ${domain} - Score: ${overallScore}%`;
       const emailContent = formatEmailContent(url, overallScore, results);
       
-      // Send email using the email service
-      const result = await sendEmail({
-        to_email: email,
-        subject: emailSubject,
-        message_html: emailContent
-      });
-      
-      if (result.success) {
-        toast.success(`Analysis results sent to ${email}`, { 
-          description: "Check your inbox for the detailed report" 
+      // Try to use the serverless function first
+      try {
+        // Send email using the serverless function
+        const result = await sendEmailApi({
+          to_email: email,
+          subject: emailSubject,
+          message_html: emailContent
         });
-      } else {
-        toast.error(`Failed to send email: ${result.message}`);
+        
+        if (result.success) {
+          toast.success(`Analysis results sent to ${email}`, { 
+            description: "Check your inbox for the detailed report" 
+          });
+        } else {
+          throw new Error(result.error || 'Unknown error');
+        }
+        
+        console.log("Email sending result:", result);
+      } catch (apiError) {
+        console.error("API email sending failed:", apiError);
+        
+        toast.warning("Serverless function not available. Using browser fallback...");
+        
+        // Fall back to client-side email sending if the API call fails
+        const result = await sendEmail({
+          to_email: email,
+          subject: emailSubject,
+          message_html: emailContent
+        });
+        
+        if (result.success) {
+          toast.success(`Analysis results sent to ${email}`, { 
+            description: "Check your inbox for the detailed report" 
+          });
+        } else {
+          toast.error(`Failed to send email: ${result.message}`);
+        }
       }
-      
-      console.log("Email sending result:", result);
     } catch (error) {
       console.error("Failed to send email:", error);
       toast.error("Failed to send email. Please try again.");
@@ -639,7 +662,10 @@ export default function HeuristicsAnalyzerPage() {
     <div className="container mx-auto p-4 max-w-3xl pt-8">
       <div className="flex flex-col space-y-8 items-center text-center">
         <div className="space-y-4 max-w-2xl">
-          <h1 className="text-4xl font-bold tracking-tight">Get Free UX Analysis on your Site</h1>
+          <div className="flex flex-col items-center gap-2">
+            <h1 className="text-4xl font-bold tracking-tight">Get Free UX Analysis on your Site</h1>
+            <Badge variant="outline" className="text-xs font-normal">Version 1.2.0</Badge>
+          </div>
           <p className="text-lg text-muted-foreground">
             This automated-AI heuristic analysis runs over the selected website of your preference. It's 100% free!
           </p>

@@ -8,7 +8,9 @@ const allowedOrigins = [
   'http://localhost:5173', 
   'http://localhost:5174', 
   'http://localhost:8888',
-  'https://ux-heuristics-analyzer.netlify.app'
+  'https://ux-heuristics-analyzer.netlify.app',
+  'https://ai.uink.digital',
+  'https://uinkyai.netlify.app'
 ];
 
 // Handle browser preflight OPTIONS request
@@ -133,14 +135,23 @@ exports.handler = async function(event, context) {
     try {
       // Use Netlify environment variable for API key
       const apiKey = process.env.SCREENSHOT_API_KEY || 'demo';
+      console.log(`Using API key: ${apiKey === 'demo' ? 'demo (default)' : 'from environment'}`);
+      
       const screenshotApiUrl = `https://api.apiflash.com/v1/urltoimage?access_key=${apiKey}&url=${encodeURIComponent(url)}&quality=85&width=1280&height=800&response_type=json&fresh=true`;
       
+      console.log(`Requesting screenshot from: ${screenshotApiUrl}`);
       const screenshotResponse = await axios.get(screenshotApiUrl);
+      console.log("Screenshot API response:", JSON.stringify(screenshotResponse.data));
+      
       if (screenshotResponse.data && screenshotResponse.data.url) {
         // Fetch the actual image and convert to base64
+        console.log(`Fetching image from: ${screenshotResponse.data.url}`);
         const imageResponse = await axios.get(screenshotResponse.data.url, { responseType: 'arraybuffer' });
         const imageBuffer = Buffer.from(imageResponse.data, 'binary');
         screenshot = imageBuffer.toString('base64');
+        console.log(`Screenshot captured successfully (${imageBuffer.length} bytes)`);
+      } else {
+        console.log("No screenshot URL in response");
       }
     } catch (screenshotError) {
       console.error('Screenshot capture failed:', screenshotError);
